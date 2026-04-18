@@ -9,11 +9,11 @@
 INSERT INTO employees (first_name, last_name, email, department, job_title, salary, hire_date) VALUES
 ('Samet İrfan',   'Dönmez',    'irfan.donmez@dogapazarlama.com',     'İnsan Kaynakları',  'IK Müdürü',             '95000',  '2019-03-15'),
 ('Mehmet', 'Demir',   'mehmet.demir@doga.com',   'Finans',            'Mali Analist',          '82000',  '2020-07-01'),
-('Zeynep', 'Çelik',   'zeynep.celik@doga.com',   'Müşteri Hizmetleri','Müşteri Temsilcisi',    '48000',  '2021-02-10'),
+('Zeynep', 'Karatekin',   'zeynep.karatekin@doga.com',   'Müşteri Hizmetleri','Müşteri Temsilcisi',    '48000',  '2021-02-10'),
 ('Ali',    'Şahin',   'ali.sahin@doga.com',      'Bilgi İşlem',       'DBA',                   '105000', '2018-11-20'),
 ('Fatma',  'Yıldız',  'fatma.yildiz@doga.com',   'İnsan Kaynakları',  'IK Uzmanı',             '58000',  '2022-01-05'),
 ('Emre',   'Arslan',  'emre.arslan@doga.com',    'Finans',            'Finans Direktörü',      '140000', '2017-06-12'),
-('Selin',  'Koç',     'selin.koc@doga.com',      'Müşteri Hizmetleri','Takım Lideri',          '65000',  '2020-09-30'),
+('Mehmet',  'İşçi',     'mehmet.isci@doga.com',      'Müşteri Hizmetleri','Takım Lideri',          '65000',  '2020-09-30'),
 ('Burak',  'Özkan',   'burak.ozkan@doga.com',    'Satış',             'Satış Müdürü',          '88000',  '2019-04-18'),
 ('Gamze',  'Aydın',   'gamze.aydin@doga.com',    'Pazarlama',         'Pazarlama Uzmanı',      '62000',  '2021-08-22'),
 ('Tarık',  'Güneş',   'tarik.gunes@doga.com',    'Bilgi İşlem',       'Sistem Yöneticisi',     '78000',  '2020-03-07');

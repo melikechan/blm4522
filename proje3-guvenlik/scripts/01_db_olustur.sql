@@ -66,8 +66,56 @@ CREATE TABLE login_attempts (
     attempted_at  TIMESTAMP DEFAULT NOW()
 );
 
+-- E-posta adresini küçük harfe çevirir ve baştaki/sondaki boşlukları siler.
+CREATE OR REPLACE FUNCTION normalize_email()
+RETURNS TRIGGER LANGUAGE plpgsql AS $$
+BEGIN
+    NEW.email := LOWER(TRIM(NEW.email));
+    RETURN NEW;
+END; $$;
+
+CREATE TRIGGER employees_normalize_email
+    BEFORE INSERT OR UPDATE OF email ON employees
+    FOR EACH ROW EXECUTE FUNCTION normalize_email();
+
+CREATE TRIGGER customers_normalize_email
+    BEFORE INSERT OR UPDATE OF email ON customers
+    FOR EACH ROW EXECUTE FUNCTION normalize_email();
+
+CREATE TRIGGER user_accounts_normalize_email
+    BEFORE INSERT OR UPDATE OF email ON user_accounts
+    FOR EACH ROW EXECUTE FUNCTION normalize_email();
+
+-- hire_date sağlanmadıysa günün tarihini atar.
+CREATE OR REPLACE FUNCTION set_hire_date()
+RETURNS TRIGGER LANGUAGE plpgsql AS $$
+BEGIN
+    IF NEW.hire_date IS NULL THEN
+        NEW.hire_date := CURRENT_DATE;
+    END IF;
+    RETURN NEW;
+END; $$;
+
+CREATE TRIGGER employees_set_hire_date
+    BEFORE INSERT ON employees
+    FOR EACH ROW EXECUTE FUNCTION set_hire_date();
+
+-- İşlem tutarının sıfır veya negatif olmasını engeller.
+CREATE OR REPLACE FUNCTION validate_transaction_amount()
+RETURNS TRIGGER LANGUAGE plpgsql AS $$
+BEGIN
+    IF NEW.amount <= 0 THEN
+        RAISE EXCEPTION 'İşlem tutarı sıfırdan büyük olmalıdır. Girilen değer: %', NEW.amount;
+    END IF;
+    RETURN NEW;
+END; $$;
+
+CREATE TRIGGER transactions_validate_amount
+    BEFORE INSERT OR UPDATE OF amount ON transactions
+    FOR EACH ROW EXECUTE FUNCTION validate_transaction_amount();
+
 \echo ''
-\echo '=== doga_pazarlama şeması başarıyla oluşturuldu ==='
+\echo '=== doga_pazarlama tablosu başarıyla oluşturuldu ==='
 \echo ''
 
 SELECT table_name
