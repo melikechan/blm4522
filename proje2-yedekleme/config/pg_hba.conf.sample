@@ -1,0 +1,44 @@
+# pg_hba.conf.sample — PostgreSQL İstemci Kimlik Doğrulama Yapılandırması
+#
+# KULLANIM:
+#   Bu dosya, PostgreSQL'in varsayılan pg_hba.conf dosyasının yerini alacak
+#   şekilde yapılandırılmıştır. Şifre tabanlı kimlik doğrulama (scram-sha-256)
+#   kullanır.
+#
+# KURULUM:
+#   1. Mevcut dosyanızı yedekleyin:
+#      sudo cp /var/lib/postgres/data/pg_hba.conf \
+#              /var/lib/postgres/data/pg_hba.conf.bak
+#
+#   2. Bu dosyayı PostgreSQL veri dizinine kopyalayın:
+#      sudo cp config/pg_hba.conf.sample /var/lib/postgres/data/pg_hba.conf
+#
+#   3. Yapılandırmayı yeniden yükleyin:
+#      sudo systemctl reload postgresql
+#      -- VEYA PostgreSQL içinden: SELECT pg_reload_conf();
+#
+# NOT: Arch Linux için PG_DATA_DIR=/var/lib/postgres/data
+#      Ubuntu/Debian için: /var/lib/postgresql/VERSION/main/pg_hba.conf
+
+# TYPE  DATABASE        USER            ADDRESS                 METHOD
+
+# ---- Yerel Bağlantılar (Unix soketi) ----
+# postgres sistem kullanıcısı için peer auth (yönetim işlemleri)
+local   all             postgres                                peer
+
+# Diğer tüm yerel kullanıcılar için scram-sha-256 (şifre doğrulama)
+local   all             all                                     scram-sha-256
+
+# ---- IPv4 Ağ Bağlantıları ----
+# Localhost üzerinden şifre doğrulama
+host    all             all             127.0.0.1/32            scram-sha-256
+
+# Yerel ağdan bağlantılar (gerekirse kendi ağ adresinizi ekleyin)
+# host    sirket_db       sirket_app      192.168.1.0/24          scram-sha-256
+
+# ---- IPv6 Bağlantıları ----
+host    all             all             ::1/128                 scram-sha-256
+
+# ---- Replikasyon (WAL arşivleme için) ----
+local   replication     backup_user                             scram-sha-256
+host    replication     backup_user     127.0.0.1/32            scram-sha-256

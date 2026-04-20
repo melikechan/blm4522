@@ -1,3 +1,11 @@
+# Parola ve hassas yapılandırma dosyaları
+backup.env
+
+# Yedekleme çıktıları (repo'ya eklenmez, ayrı depolanır)
+backups/
+*.dump
+*.tar.gz
+
 ## Core latex/pdflatex auxiliary files:
 *.aux
 *.lof
