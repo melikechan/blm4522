@@ -2,6 +2,7 @@
 -- Proje 3: Veritabanı Güvenliği ve Erişim Kontrolü
 -- Tüm güvenlik katmanlarının kapsamlı demosu.
 -- 01–07 arası scriptler çalıştırıldıktan sonra kullanın.
+-- Veritabanı: PostgreSQL 18
 
 \c doga_pazarlama
 SET app.encryption_key = 'doga_demo_key_2024_change_in_production!';

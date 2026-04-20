@@ -1,6 +1,7 @@
 -- 05_sifreleme.sql
 -- Proje 3: Veritabanı Güvenliği ve Erişim Kontrolü
 -- PGP simetrik şifreleme (pgcrypto) ile sütun seviyesinde veri şifreleme.
+-- Veritabanı: PostgreSQL 18
 
 \c doga_pazarlama
 SET app.encryption_key = 'doga_demo_key_2024_change_in_production!';

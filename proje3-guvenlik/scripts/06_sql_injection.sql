@@ -2,6 +2,7 @@
 -- Proje 3: Veritabanı Güvenliği ve Erişim Kontrolü
 -- SQL Injection saldırı demosu ve korunma yöntemi.
 -- UYARI: Yalnızca eğitim amaçlıdır.
+-- Veritabanı: PostgreSQL 18
 
 \c doga_pazarlama
 

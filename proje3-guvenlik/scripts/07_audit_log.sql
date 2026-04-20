@@ -1,6 +1,7 @@
 -- 07_audit_log.sql
 -- Proje 3: Veritabanı Güvenliği ve Erişim Kontrolü
 -- Tetikleyici tabanlı denetim günlüğü (audit log) ve şüpheli aktivite tespiti.
+-- Veritabanı: PostgreSQL 18
 
 \c doga_pazarlama
 SET app.encryption_key = 'doga_demo_key_2024_change_in_production!';

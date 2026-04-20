@@ -1,6 +1,7 @@
 -- 04_access_control.sql
 -- Proje 3: Veritabanı Güvenliği ve Erişim Kontrolü
 -- GRANT/REVOKE yetkilendirme ve Satır Seviyesinde Güvenlik (RLS) yapılandırması.
+-- Veritabanı: PostgreSQL 18
 
 \c doga_pazarlama
 

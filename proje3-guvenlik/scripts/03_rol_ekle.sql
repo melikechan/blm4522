@@ -2,6 +2,7 @@
 -- Proje 3: Veritabanı Güvenliği ve Erişim Kontrolü
 -- Bu script, PostgreSQL cluster seviyesinde roller oluşturur.
 -- Her rol için güçlü bir şifre belirlenmiştir.
+-- Veritabanı: PostgreSQL 18
 
 -- Mevcut rolleri temizle
 DROP ROLE IF EXISTS doga_admin;

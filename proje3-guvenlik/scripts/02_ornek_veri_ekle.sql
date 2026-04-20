@@ -1,7 +1,7 @@
 -- 02_seed_data.sql
 -- Proje 3: Veritabanı Güvenliği ve Erişim Kontrolü
 -- Doğa Pazarlama şirketine ait oluşturulan tabloya örnek veri ekler.
--- Veritabanı: PostgreSQL
+-- Veritabanı: PostgreSQL 18
 
 \c doga_pazarlama
 
