@@ -1,0 +1,18 @@
+# hastane_db — Otomatik Yedekleme Cron Tanımları
+# Kurulum: crontab -l | cat - /home/melikechan/git-repos/personal/blm4522/proje2-yedekleme/config/crontab_yedekleme.txt | crontab -
+# Silme  : crontab -e  (ilgili satırları kaldırın)
+
+SHELL=/bin/bash
+PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
+
+# Günlük tam yedek (her gece 02:00)
+0 2 * * * /home/melikechan/git-repos/personal/blm4522/backups/auto_yedekleme.sh >> /home/melikechan/git-repos/personal/blm4522/backups/logs/cron_output.log 2>&1
+
+# Haftalık tam yedek — tüm formatlar (Pazar 03:00)
+0 3 * * 0 /home/melikechan/git-repos/personal/blm4522/proje2-yedekleme/scripts/04_tam_yedekleme.sh >> /home/melikechan/git-repos/personal/blm4522/backups/logs/cron_output.log 2>&1
+
+# Fark yedek — iş günleri 09:00-18:00 arası her saat başı
+0 9-18 * * 1-5 /home/melikechan/git-repos/personal/blm4522/proje2-yedekleme/scripts/06_fark_yedekleme.sh >> /home/melikechan/git-repos/personal/blm4522/backups/logs/cron_output.log 2>&1
+
+# Aylık artık yedek — her ayın 1'i 04:00
+0 4 1 * * /home/melikechan/git-repos/personal/blm4522/proje2-yedekleme/scripts/05_artik_yedekleme.sh >> /home/melikechan/git-repos/personal/blm4522/backups/logs/cron_output.log 2>&1
