@@ -21,6 +21,8 @@
 \usepackage{parskip}
 \usepackage{placeins}
 \usepackage{float}
+\usepackage{graphicx}
+\graphicspath{{images/}}
 \usepackage{tikz}
 \usetikzlibrary{positioning, shapes.multipart, arrows.meta}
 
@@ -131,9 +133,9 @@ Proje kapsamında \texttt{hastane\_db} adlı kurgusal bir hastane yönetim siste
 
 \begin{itemize}
   \item \textbf{PostgreSQL 18}: Açık kaynaklı, nesne-ilişkisel veritabanı yönetim sistemi.
-  \item \textbf{pg\_dump / pg\_restore}: PostgreSQL'in mantıksal yedekleme araçları. Özel format (\texttt{-Fc}), maksimum sıkıştırma (\texttt{-Z9}), tek tablo geri yükleme (\texttt{--table}) desteklenmektedir.
-  \item \textbf{pg\_basebackup}: Fiziksel temel yedek almak için kullanılan araç. Artık yedeklemenin başlangıç noktasını oluşturur.
-  \item \textbf{WAL (Write-Ahead Logging)}: PostgreSQL'in değişiklikleri önce bir günlük dosyasına yazdığı mekanizma. WAL arşivleme etkinleştirildiğinde bu dosyalar ayrı bir dizine kopyalanır ve PITR için kullanılır.
+  \item \textbf{pg\_dump / pg\_restore}: Mantıksal yedekleme araçları; özel format (\texttt{-Fc}) ve sıkıştırma (\texttt{-Z9}) desteği sunar.
+  \item \textbf{pg\_basebackup}: Fiziksel temel yedek almak için kullanılır; artık yedeklemenin başlangıç noktasını oluşturur.
+  \item \textbf{WAL (Write-Ahead Logging)}: Değişiklikleri önce günlük dosyasına yazan mekanizma; arşivleme ile PITR'ı mümkün kılar.
   \item \textbf{Bash}: Kurulum ve yapılandırma adımlarını otomatikleştirmek için kullanılan kabuk (shell) betik dili.
   \item \textbf{Cron}: Yedekleme görevlerini belirli aralıklarla otomatik çalıştırmak için kullanılmıştır.
   \item \textbf{scram-sha-256}: RFC 7677 tabanlı kimlik doğrulama protokolü; PostgreSQL 14'ten itibaren varsayılan olarak kullanılmaktadır.
@@ -321,7 +323,7 @@ archive_command = 'cp %p /var/lib/postgres/backups/wal_archive/%f'
 max_wal_senders = 3
 \end{lstlisting}
 
-\section{Kimlik Doğrulama Ayarları}
+\section{Kimlik Doğrulama ve Yetkilendirme}
 
 Varsayılan Arch Linux kurulumunda yerel bağlantılar için \texttt{peer} kullanılır. Bu projede \texttt{scram-sha-256} etkinleştirilmiştir:
 
@@ -393,9 +395,15 @@ $PGDUMP -Ft -f "${DB_NAME}_tam_${TS}.tar"
 find "$FULL_DIR" -type f -mtime "+${RETENTION_DAYS}" -delete
 \end{lstlisting}
 
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\linewidth]{1_full_backup}
+  \caption{Tam yedekleme çıktısı}
+  \label{fig:full-backup}
+\end{figure}
+
 \begin{table}[H]
   \centering
-  \caption{Yedekleme formatları ve özellikleri}
   \begin{tabular}{llll}
     \toprule
     \textbf{Format} & \textbf{Uzantı} & \textbf{Geri Yükleme} & \textbf{Özellik} \\
@@ -406,6 +414,7 @@ find "$FULL_DIR" -type f -mtime "+${RETENTION_DAYS}" -delete
     Tar      & \texttt{.tar}    & \texttt{pg\_restore}    & Dizin bazlı \\
     \bottomrule
   \end{tabular}
+  \caption{Yedekleme formatları ve özellikleri}
   \label{tab:backup-formats}
 \end{table}
 
@@ -433,6 +442,13 @@ done < <(sudo -u postgres find "$PG_DATA_DIR/pg_wal" \
     -maxdepth 1 -type f -name '[0-9A-F]*')
 \end{lstlisting}
 
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\linewidth]{2_incremental_backup}
+  \caption{Artık yedekleme çıktısı — pg\_basebackup ve WAL arşivleme}
+  \label{fig:incremental-backup}
+\end{figure}
+
 \newpage
 \section{Fark Yedekleme (Differential Backup)}
 
@@ -456,9 +472,15 @@ SELECT ... FROM tedaviler  WHERE tarih      >= NOW() - INTERVAL '7 days';
 SELECT ... FROM yatislar   WHERE giris_tarihi >= NOW() - INTERVAL '7 days';
 \end{lstlisting}
 
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\linewidth]{3_diff_backup}
+  \caption{Fark yedekleme çıktısı — şema, veri ve tablo bazlı yedekler}
+  \label{fig:diff-backup}
+\end{figure}
+
 \begin{table}[H]
   \centering
-  \caption{Yedekleme türleri karşılaştırması}
   \begin{tabular}{llll}
     \toprule
     \textbf{Tür} & \textbf{Referans} & \textbf{Boyut} & \textbf{Geri Yükleme} \\
@@ -468,6 +490,7 @@ SELECT ... FROM yatislar   WHERE giris_tarihi >= NOW() - INTERVAL '7 days';
     Artık (Incr)& Son herhangi yedek& Küçük  & Full + Incr\textsubscript{1..n} \\
     \bottomrule
   \end{tabular}
+  \caption{Yedekleme türleri karşılaştırması}
   \label{tab:backup-types}
 \end{table}
 
@@ -524,6 +547,13 @@ for tablo in hastalar yatislar randevular tedaviler; do
 done
 \end{lstlisting}
 
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\linewidth]{5_1_diseaster_recovery}
+  \caption{Felaket kurtarma — Senaryo 1 (DROP TABLE) ve Senaryo 2 (toplu DELETE)}
+  \label{fig:dr1}
+\end{figure}
+
 \subsection{Senaryo 3: Yanlış Toplu Güncelleme (UPDATE)}
 
 \textbf{Felaket:} Tüm randevular yanlışlıkla \texttt{iptal} durumuna getirilir.
@@ -559,6 +589,13 @@ pg_restore ... -d "${DB_NAME}_kurtarildi" "$BACKUP_S4"
 -- ALTER DATABASE hastane_db RENAME TO hastane_db_eski;
 -- ALTER DATABASE hastane_db_kurtarildi RENAME TO hastane_db;
 \end{lstlisting}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\linewidth]{5_2_diseaster_recovery}
+  \caption{Felaket kurtarma — Senaryo 3 (yanlış UPDATE) ve Senaryo 4 (tam kayıp)}
+  \label{fig:dr2}
+\end{figure}
 
 \section{Point-in-Time Recovery (PITR)}
 
@@ -598,6 +635,13 @@ recovery_target_action = 'promote'
 -- recovery_target_time = '2026-04-21 12:00:00 +03'
 \end{lstlisting}
 
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\linewidth]{6_pitr_recovery}
+  \caption{PITR kurtarma — geri yükleme noktası, felaket simülasyonu ve doğrulama}
+  \label{fig:pitr}
+\end{figure}
+
 Gerçek PITR adımları:
 
 \begin{enumerate}
@@ -625,6 +669,13 @@ Gerçek PITR adımları:
 -- Her ayin 1'i 04:00 -- Aylik artik yedek
 0 4 1 * *   05_artik_yedekleme.sh
 \end{lstlisting}
+
+\begin{figure}[H]
+  \centering
+  \includegraphics[width=\linewidth]{4_scheduled_backup}
+  \caption{Zamanlanmış yedekleme — cron kurulumu ve otomatik betik}
+  \label{fig:scheduled-backup}
+\end{figure}
 
 \begin{table}[ht]
   \centering
