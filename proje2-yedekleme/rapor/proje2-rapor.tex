@@ -1,0 +1,700 @@
+\documentclass[12pt, a4paper]{report}
+
+% --- UNIVERSAL PREAMBLE BLOCK ---
+\usepackage[
+  margin=2cm
+]{geometry}
+\usepackage{fontspec}
+
+\usepackage[turkish, bidi=basic, provide=*]{babel}
+
+\babelprovide[import, onchar=ids fonts]{turkish}
+\babelprovide[import, onchar=ids fonts]{english}
+
+\usepackage{enumitem}
+\setlist[itemize]{label=-}
+
+\usepackage{dirtree}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{booktabs}
+\usepackage{parskip}
+\usepackage{placeins}
+\usepackage{float}
+\usepackage{tikz}
+\usetikzlibrary{positioning, shapes.multipart, arrows.meta}
+
+%----------BOX----------
+
+\usepackage{tcolorbox}
+
+\newtcolorbox{block}[1]{
+  colback=blue!5!white,
+  colframe=blue!75!black,
+  fonttitle=\bfseries,
+  title=#1,
+  arc=1mm,
+  sharp corners=south
+}
+
+%----------METADATA----------
+\usepackage{titling}
+\usepackage{titlesec}
+\titleformat{\chapter}[block]{\Large\bfseries}{\thechapter.}{0.5em}{}
+\titlespacing*{\chapter}{0pt}{-10pt}{8pt}
+
+\newcommand{\projectname}{Proje 2: Veritabanı Yedekleme ve Felaketten Kurtarma Planı}
+\newcommand{\studentnumber}{22290121}
+
+\title{BLM4522 - Ağ Tabanlı Paralel Dağıtım Sistemleri Vize Projesi}
+\author{Melike Vurucu}
+\date{\today}
+
+%----------TITLE LAYOUT----------
+\pretitle{
+\begin{center}\LARGE}
+  \posttitle{\\[0.5em]\large\projectname
+\end{center}}
+\preauthor{
+\begin{center}}
+  \postauthor{\ (\studentnumber)\\[0.3em]\small Github: \url{https://github.com/melikechan/blm4522}
+\end{center}}
+
+%----------CODE STYLE----------
+\definecolor{codegray}{rgb}{0.95,0.95,0.95}
+\definecolor{codeblue}{rgb}{0.0,0.3,0.6}
+\definecolor{codegreen}{rgb}{0.1,0.5,0.1}
+\definecolor{codepurple}{rgb}{0.4,0.0,0.5}
+\definecolor{codered}{rgb}{0.7,0.0,0.0}
+
+\lstdefinestyle{sqlstyle}{
+  backgroundcolor=\color{codegray},
+  commentstyle=\color{codegreen}\itshape,
+  keywordstyle=\color{codeblue}\bfseries,
+  stringstyle=\color{codered},
+  basicstyle=\ttfamily\small,
+  breaklines=true,
+  captionpos=b,
+  keepspaces=true,
+  showspaces=false,
+  showstringspaces=false,
+  tabsize=4,
+  frame=single,
+  framerule=0.5pt,
+  language=SQL,
+  extendedchars=true,
+  morekeywords={
+    ROLE, LOGIN, PASSWORD, CREATEDB, CREATEROLE,
+    CONNECTION, LIMIT, SECURITY, DEFINER, ENABLE,
+    FORCE, ROW, LEVEL, POLICY, USING, WITH, CHECK,
+    TRIGGER, AFTER, EACH, EXECUTE, FUNCTION, RETURNS,
+    LANGUAGE, plpgsql, DECLARE, BEGIN, END, RETURN,
+    QUERY, RAISE, NOTICE, EXCEPTION, WHEN, THEN,
+    REPLICATION, SUPERUSER, NOCREATEDB, NOCREATEROLE, NOSUPERUSER,
+    TIMESTAMPTZ, SMALLINT, REFERENCES, CASCADE, UNIQUE
+  }
+}
+
+\lstset{style=sqlstyle}
+
+% hyperref must be loaded last
+\usepackage{hyperref}
+\hypersetup{
+  colorlinks=true,
+  linkcolor=black!60!black,
+  urlcolor=blue!60!black,
+  citecolor=blue!60!black
+}
+
+%----------DOCUMENT----------
+\begin{document}
+
+\maketitle
+\tableofcontents
+
+\chapter{Giriş}
+
+Bu projede PostgreSQL veritabanı yönetim sistemi kullanılarak Linux ortamında bir yedekleme ve felaketten kurtarma çözümü uygulamalı olarak gösterilmiştir.
+
+Proje kapsamında \texttt{hastane\_db} adlı kurgusal bir hastane yönetim sistemi veritabanı oluşturulup bu veritabanı üzerinde aşağıdaki bileşenler hayata geçirilmiştir:
+
+\begin{enumerate}
+  \item \textbf{Şifre tabanlı kimlik doğrulama:} \texttt{scram-sha-256} ile güvenli erişim
+  \item \textbf{Üç farklı yedekleme stratejisi:} Tam (full), fark (differential) ve artık (incremental) yedekleme
+  \item \textbf{Otomatik zamanlayıcı:} Cron ile yedekleme işlerinin belirli aralıklarla otomatikleştirilmesi
+  \item \textbf{Felaketten kurtarma:} Kaza ile silinen, düşürülen veya yanlış güncellenen verilerin geri kazanılması
+  \item \textbf{Point-in-Time Recovery (PITR):} WAL replay ile belirli bir zaman noktasına geri dönme
+  \item \textbf{Yedek doğrulama:} Alınan yedeklerin gerçekten kullanılabilir olduğunun test edilmesi
+\end{enumerate}
+
+\section{Kullanılan Teknolojiler}
+
+\begin{itemize}
+  \item \textbf{PostgreSQL 18}: Açık kaynaklı, nesne-ilişkisel veritabanı yönetim sistemi.
+  \item \textbf{pg\_dump / pg\_restore}: PostgreSQL'in mantıksal yedekleme araçları. Özel format (\texttt{-Fc}), maksimum sıkıştırma (\texttt{-Z9}), tek tablo geri yükleme (\texttt{--table}) desteklenmektedir.
+  \item \textbf{pg\_basebackup}: Fiziksel temel yedek almak için kullanılan araç. Artık yedeklemenin başlangıç noktasını oluşturur.
+  \item \textbf{WAL (Write-Ahead Logging)}: PostgreSQL'in değişiklikleri önce bir günlük dosyasına yazdığı mekanizma. WAL arşivleme etkinleştirildiğinde bu dosyalar ayrı bir dizine kopyalanır ve PITR için kullanılır.
+  \item \textbf{Bash}: Kurulum ve yapılandırma adımlarını otomatikleştirmek için kullanılan kabuk (shell) betik dili.
+  \item \textbf{Cron}: Yedekleme görevlerini belirli aralıklarla otomatik çalıştırmak için kullanılmıştır.
+  \item \textbf{scram-sha-256}: RFC 7677 tabanlı kimlik doğrulama protokolü; PostgreSQL 14'ten itibaren varsayılan olarak kullanılmaktadır.
+\end{itemize}
+
+\newpage
+\section{Veritabanı Şeması}
+
+\textbf{hastane\_db} veritabanı bir hastane yönetim sistemini simüle eden sekiz tablodan oluşmaktadır. Şekil~\ref{fig:er}'deki entity-relationship diyagramı tablo ilişkilerini göstermektedir.
+
+\tikzset{
+  ent/.style={
+    rectangle split, rectangle split parts=2,
+    draw=blue!60!black, very thick,
+    rectangle split part fill={blue!15!white, white},
+    font=\small\ttfamily,
+    align=left,
+    inner sep=5pt,
+    text width=3.2cm
+  }
+}
+
+\begin{figure}[H]
+  \centering
+  \resizebox{\linewidth}{!}{%
+    \begin{tikzpicture}[
+        fk/.style={->, >=Stealth, dashed, thick, blue!50!black, line width=1.2pt}
+      ]
+
+      \node[ent] (bol) at (0,0) {
+        \normalfont\bfseries\small\sffamily bolumler
+        \nodepart{second}
+        \underline{id}\ PK\\[1pt]
+        ad\ UNIQUE\\[1pt]
+        kat, kapasite
+      };
+
+      \node[ent] (dok) at (5.5,0) {
+        \normalfont\bfseries\small\sffamily doktorlar
+        \nodepart{second}
+        \underline{id}\ PK\\[1pt]
+        tc\_no\ UNIQUE\\[1pt]
+        ad, soyad, uzmanlik\\[1pt]
+        bolum\_id\ FK\\[1pt]
+        email, telefon
+      };
+
+      \node[ent] (has) at (11,0) {
+        \normalfont\bfseries\small\sffamily hastalar
+        \nodepart{second}
+        \underline{id}\ PK\\[1pt]
+        tc\_no\ UNIQUE\\[1pt]
+        ad, soyad\\[1pt]
+        dogum\_tarihi, cinsiyet\\[1pt]
+        kan\_grubu
+      };
+
+      \node[ent] (yat) at (0,-5.5) {
+        \normalfont\bfseries\small\sffamily yataklar
+        \nodepart{second}
+        \underline{id}\ PK\\[1pt]
+        bolum\_id\ FK\\[1pt]
+        numara, durum
+      };
+
+      \node[ent] (ran) at (5.5,-5.5) {
+        \normalfont\bfseries\small\sffamily randevular
+        \nodepart{second}
+        \underline{id}\ PK\\[1pt]
+        hasta\_id\ FK\\[1pt]
+        doktor\_id\ FK\\[1pt]
+        tarih\_saat, durum
+      };
+
+      \node[ent] (yts) at (11,-5.5) {
+        \normalfont\bfseries\small\sffamily yatislar
+        \nodepart{second}
+        \underline{id}\ PK\\[1pt]
+        hasta\_id\ FK\\[1pt]
+        doktor\_id\ FK\\[1pt]
+        yatak\_id\ FK\\[1pt]
+        giris/cikis\_tarihi
+      };
+
+      \node[ent] (ted) at (3,-10) {
+        \normalfont\bfseries\small\sffamily tedaviler
+        \nodepart{second}
+        \underline{id}\ PK\\[1pt]
+        hasta\_id\ FK\\[1pt]
+        doktor\_id\ FK\\[1pt]
+        tani, tarih
+      };
+
+      \node[ent] (rec) at (8.5,-10) {
+        \normalfont\bfseries\small\sffamily receteler
+        \nodepart{second}
+        \underline{id}\ PK\\[1pt]
+        tedavi\_id\ FK\\[1pt]
+        ilac\_adi, doz\\[1pt]
+        sure\_gun
+      };
+
+      % FK arrows
+      \draw[fk] (dok.west)  -- (bol.east)   node[midway,above,font=\footnotesize\sffamily]{N:1};
+      \draw[fk] (yat.north) -- (bol.south)  node[midway,right,font=\footnotesize\sffamily]{N:1};
+      \draw[fk] (ran.west)  -- ++(-0.6,0) |- (dok.south) node[pos=0.2,left,font=\footnotesize\sffamily]{N:1};
+      \draw[fk] (ran.east)  -- ++(0.6,0)  |- (has.south) node[pos=0.2,right,font=\footnotesize\sffamily]{N:1};
+      \draw[fk] (yts.west)  -- (ran.east)  node[midway,above,font=\footnotesize\sffamily]{};
+      \draw[fk] (yts.north) -- (has.south) node[midway,right,font=\footnotesize\sffamily]{N:1};
+      \draw[fk] (yts.west)  -- ++(-0.4,0) |- (yat.east) node[pos=0.2,above,font=\footnotesize\sffamily]{N:1};
+      \draw[fk] (ted.north) -- ++(0,0.5)  -| (has.south) node[pos=0.2,above,font=\footnotesize\sffamily]{N:1};
+      \draw[fk] (ted.north) -- ++(0,0.5)  -| (dok.south) node[pos=0.2,above,font=\footnotesize\sffamily]{};
+      \draw[fk] (rec.west)  -- (ted.east)  node[midway,above,font=\footnotesize\sffamily]{N:1};
+
+    \end{tikzpicture}%
+  }
+  \caption{hastane\_db ER diyagramı}
+  \label{fig:er}
+\end{figure}
+
+\section{Proje Senaryosu}
+
+Projede \texttt{hastane\_db} adlı kurgusal bir hastane yönetim sistemi veritabanı kullanılmıştır. Bu veritabanı gerçek bir klinik ortamı simüle eder ve sekiz tablodan oluşur:
+
+\begin{itemize}
+  \item \textbf{bolumler:} Hastane klinik bölümleri (10 kayıt)
+  \item \textbf{doktorlar:} Doktor bilgileri ve uzmanlıkları (12 kayıt)
+  \item \textbf{hastalar:} Hasta kişisel ve tıbbi bilgileri (50 kayıt)
+  \item \textbf{yataklar:} Bölümlere ait yatak envanteri (50 kayıt)
+  \item \textbf{randevular:} Hasta-doktor randevuları (120 kayıt)
+  \item \textbf{yatislar:} Yatarak tedavi kayıtları (15 kayıt)
+  \item \textbf{tedaviler:} Tanı ve tedavi kayıtları (80 kayıt)
+  \item \textbf{receteler:} Tedaviye bağlı ilaç reçeteleri (100+ kayıt)
+\end{itemize}
+
+\section{Proje Klasör Yapısı}
+
+Aşağıda projenin klasör yapısı verilmiştir:
+
+\vspace{1em}
+\dirtree{%
+  .1 proje2-yedekleme/.
+  .2 config/.
+  .3 backup.env \qquad \# Parolalar, dizin yolları (gitignore'da).
+  .3 backup.env.sample \qquad \# Şablon — sürüm kontrolünde.
+  .3 pg\_hba\_example.conf \qquad \# Kimlik doğrulama şablonu.
+  .3 postgresql\_example.conf \qquad \# WAL yapılandırma şablonu.
+  .3 pitr\_recovery\_example.conf \qquad \# PITR kurtarma örneği.
+  .2 scripts/.
+  .3 00\_kurulum.sh \qquad \# Kurulum (şema + veri + roller).
+  .3 01\_db\_olustur.sql \qquad \# Veritabanı şeması ve view'lar.
+  .3 02\_ornek\_veri\_ekle.sql \qquad \# Örnek veri (400+ kayıt).
+  .3 03\_rol\_ekle.sql \qquad \# Roller ve yetkiler.
+  .3 04\_tam\_yedekleme.sh \qquad \# Tam yedek (4 format).
+  .3 05\_artik\_yedekleme.sh \qquad \# Artık yedek (WAL + pg\_basebackup).
+  .3 06\_fark\_yedekleme.sh \qquad \# Fark yedek.
+  .3 07\_zamanlanmis\_yedekleme.sh \qquad \# Cron kurulumu.
+  .3 08\_felaket\_kurtarma.sh \qquad \# 4 felaket senaryosu.
+  .3 09\_pitr\_kurtarma.sh \qquad \# Point-in-Time Recovery.
+  .3 10\_yedek\_test.sh \qquad \# Yedek doğrulama ve testler.
+}
+
+\chapter{Yedekleme Stratejileri}
+
+\texttt{00\_kurulum.sh} dört adımda çalışır:
+
+\begin{enumerate}
+  \item yedekleme dizinlerini oluşturur,
+  \item \texttt{01\_db\_olustur.sql} ile şemayı oluşturur,
+  \item \texttt{02\_ornek\_veri\_ekle.sql} ile örnek verileri yükler,
+  \item \texttt{03\_rol\_ekle.sql} ile rolleri ve yetkileri yapılandırır.
+\end{enumerate}
+
+\texttt{config/postgresql\_example.conf} dosyasındaki WAL yapılandırması \texttt{postgresql.conf}'a eklenir:
+
+\begin{lstlisting}[caption={WAL arşivleme yapılandırması (postgresql\_example.conf)}]
+-- WAL seviyesi: PITR ve replikasyon icin gerekli
+wal_level = replica
+
+-- WAL dosyalarini arsiv dizinine kopyala
+archive_mode = on
+archive_command = 'cp %p /var/lib/postgres/backups/wal_archive/%f'
+
+-- pg_basebackup icin gonderici sayisi
+max_wal_senders = 3
+\end{lstlisting}
+
+\section{Kimlik Doğrulama Ayarları}
+
+Varsayılan Arch Linux kurulumunda yerel bağlantılar için \texttt{peer} kullanılır. Bu projede \texttt{scram-sha-256} etkinleştirilmiştir:
+
+\begin{lstlisting}[caption={pg\_hba\_example.conf — şifre doğrulama}]
+-- postgresql.conf
+password_encryption = scram-sha-256
+
+-- pg_hba.conf
+local   hastane_db   backup_user                    scram-sha-256
+local   hastane_db   hastane_app                    scram-sha-256
+host    hastane_db   backup_user   127.0.0.1/32     scram-sha-256
+host    hastane_db   hastane_app   127.0.0.1/32     scram-sha-256
+-- WAL replikasyonu
+local   replication  backup_user                    scram-sha-256
+host    replication  backup_user   127.0.0.1/32     scram-sha-256
+\end{lstlisting}
+
+\newpage
+İki ayrı rol oluşturulmuştur; yedekleme araçlarının yetkisi uygulama kullanıcısından farklıdır:
+
+\begin{lstlisting}[caption={03\_rol\_ekle.sql — roller}]
+-- Rol varsa guncelle, yoksa olustur (idempotent)
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'backup_user') THEN
+        CREATE ROLE backup_user WITH LOGIN PASSWORD 'Backup@Hastane2025!'
+            SUPERUSER REPLICATION;
+    ELSE
+        ALTER ROLE backup_user WITH LOGIN PASSWORD 'Backup@Hastane2025!'
+            SUPERUSER REPLICATION;
+    END IF;
+END $$;
+
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'hastane_app') THEN
+        CREATE ROLE hastane_app WITH LOGIN PASSWORD 'HastaneApp@2025!'
+            NOCREATEDB NOCREATEROLE NOSUPERUSER;
+    ELSE
+        ALTER ROLE hastane_app WITH LOGIN PASSWORD 'HastaneApp@2025!'
+            NOCREATEDB NOCREATEROLE NOSUPERUSER;
+    END IF;
+END $$;
+
+ALTER DATABASE hastane_db OWNER TO backup_user;
+\end{lstlisting}
+
+\newpage
+\section{Tam Yedekleme (Full Backup)}
+
+Tam yedekleme, veritabanının tamamını tek bir dosyaya aktarır. Diğer yedekleme türlerinin \textbf{referans noktası}dır. \texttt{04\_tam\_yedekleme.sh} dört farklı formatta yedek alır:
+
+\begin{lstlisting}[caption={04\_tam\_yedekleme.sh — dört format}]
+PGDUMP="pg_dump -h $DB_HOST -p $DB_PORT -U $DB_USER $DB_NAME"
+
+-- Custom format: pg_restore uyumlu, secici geri yukleme destekler
+$PGDUMP -Fc -Z9 -f "${DB_NAME}_tam_${TS}.dump"
+
+-- SQL format: her PostgreSQL surumuyle uyumlu
+$PGDUMP -Fp -f "${DB_NAME}_tam_${TS}.sql"
+
+-- Gzip SQL: maksimum disk tasarrufu
+$PGDUMP -Fp | gzip -9 > "${DB_NAME}_tam_${TS}.sql.gz"
+
+-- Tar arsivi: dizin tabanli geri yukleme
+$PGDUMP -Ft -f "${DB_NAME}_tam_${TS}.tar"
+
+-- Saklama politikasi: eski yedekleri sil
+find "$FULL_DIR" -type f -mtime "+${RETENTION_DAYS}" -delete
+\end{lstlisting}
+
+\begin{table}[H]
+  \centering
+  \caption{Yedekleme formatları ve özellikleri}
+  \begin{tabular}{llll}
+    \toprule
+    \textbf{Format} & \textbf{Uzantı} & \textbf{Geri Yükleme} & \textbf{Özellik} \\
+    \midrule
+    Custom   & \texttt{.dump}   & \texttt{pg\_restore}    & Seçici geri yükleme \\
+    SQL      & \texttt{.sql}    & \texttt{psql}           & İnsan okunabilir \\
+    Gzip SQL & \texttt{.sql.gz} & \texttt{zcat | psql}    & En küçük boyut \\
+    Tar      & \texttt{.tar}    & \texttt{pg\_restore}    & Dizin bazlı \\
+    \bottomrule
+  \end{tabular}
+  \label{tab:backup-formats}
+\end{table}
+
+\newpage
+\section{Artık Yedekleme (Incremental Backup)}
+
+Artık yedekleme, \textbf{son herhangi bir yedekten} bu yana üretilen WAL dosyalarını arşivler. \texttt{05\_artik\_yedekleme.sh} temel yedek alır ve WAL dosyalarını kopyalar:
+
+\begin{lstlisting}[caption={05\_artik\_yedekleme.sh — WAL arşivleme}]
+-- Temel yedek: pg_basebackup ile fiziksel kopya
+pg_basebackup \
+    -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" \
+    -D "$BASE_DIR" -Ft -z --checkpoint=fast -P
+
+-- Aktif WAL segmentini tamamla
+psql ... -c "SELECT pg_switch_wal();"
+
+-- WAL dosyalarini postgres yetkisiyle oku, hedef dizine yaz
+while IFS= read -r wal_file; do
+    dest="$WAL_DIR/$(basename "$wal_file")"
+    if [[ ! -f "$dest" ]]; then
+        sudo -u postgres cat "$wal_file" > "$dest"
+    fi
+done < <(sudo -u postgres find "$PG_DATA_DIR/pg_wal" \
+    -maxdepth 1 -type f -name '[0-9A-F]*')
+\end{lstlisting}
+
+\newpage
+\section{Fark Yedekleme (Differential Backup)}
+
+Fark yedekleme, \textbf{her zaman son TAM yedekten} bu yana değişen verileri arşivler. \texttt{06\_fark\_yedekleme.sh} dört farklı çıktı üretir:
+
+\begin{lstlisting}[caption={06\_fark\_yedekleme.sh — fark yedek türleri}]
+-- 1. Sema-only: tablolar, indeksler, view'lar
+$PGDUMP --schema-only -f "sema_only_${TS}.sql"
+
+-- 2. Veri-only: yalnizca INSERT ifadeleri
+$PGDUMP --data-only --column-inserts -f "veri_only_${TS}.sql"
+
+-- 3. Secici tablo yedekleri (sik degisen tablolar)
+for tablo in randevular yatislar tedaviler receteler; do
+    $PGDUMP -Fc -t "$tablo" -f "${tablo}_${TS}.dump"
+done
+
+-- 4. Son 7 gun degisen kayitlar (zaman damgasi filtreli)
+SELECT ... FROM randevular WHERE created_at >= NOW() - INTERVAL '7 days';
+SELECT ... FROM tedaviler  WHERE tarih      >= NOW() - INTERVAL '7 days';
+SELECT ... FROM yatislar   WHERE giris_tarihi >= NOW() - INTERVAL '7 days';
+\end{lstlisting}
+
+\begin{table}[H]
+  \centering
+  \caption{Yedekleme türleri karşılaştırması}
+  \begin{tabular}{llll}
+    \toprule
+    \textbf{Tür} & \textbf{Referans} & \textbf{Boyut} & \textbf{Geri Yükleme} \\
+    \midrule
+    Tam (Full)  & —                 & Büyük  & Doğrudan \\
+    Fark (Diff) & Son TAM yedek     & Orta   & Full + Diff \\
+    Artık (Incr)& Son herhangi yedek& Küçük  & Full + Incr\textsubscript{1..n} \\
+    \bottomrule
+  \end{tabular}
+  \label{tab:backup-types}
+\end{table}
+
+\chapter{Kurtarma ve Otomasyon}
+
+\section{Felaketten Kurtarma Senaryoları}
+
+\texttt{08\_felaket\_kurtarma.sh}, dört farklı felaket senaryosunu sırasıyla simüle eder ve her birini otomatik olarak kurtarır.
+
+\subsection{Senaryo 1: Kritik Tablo Silindi (DROP TABLE)}
+
+\textbf{Felaket:} \texttt{tedaviler} ve \texttt{receteler} tabloları yanlışlıkla düşürülür.
+
+\begin{lstlisting}[caption={Senaryo 1 — tablo silme simülasyonu}]
+DROP TABLE receteler CASCADE;
+DROP TABLE tedaviler CASCADE;
+\end{lstlisting}
+
+\textbf{Kurtarma:} \texttt{pg\_restore --table} ile yalnızca silinen tablolar seçici olarak geri yüklenir:
+
+\begin{lstlisting}[caption={Senaryo 1 — tablo geri yükleme}]
+-- Sema geri yukle
+pg_restore -d "$DB_NAME" --table=tedaviler --schema-only "$BACKUP"
+pg_restore -d "$DB_NAME" --table=receteler --schema-only "$BACKUP"
+
+-- Veriyi geri yukle
+pg_restore -d "$DB_NAME" \
+    --table=tedaviler --table=receteler \
+    --data-only "$BACKUP"
+\end{lstlisting}
+
+\subsection{Senaryo 2: Toplu Veri Silindi (DELETE)}
+
+\textbf{Felaket:} Tüm hasta kayıtları ve bağlı tablolar yanlışlıkla silinir.
+
+\begin{lstlisting}[caption={Senaryo 2 — toplu silme}]
+DELETE FROM randevular;
+DELETE FROM yatislar;
+DELETE FROM tedaviler;
+DELETE FROM hastalar;
+\end{lstlisting}
+
+\textbf{Kurtarma:} Yedek geçici bir veritabanına geri yüklenir; \texttt{COPY} ile üretim veritabanına aktarılır:
+
+\begin{lstlisting}[caption={Senaryo 2 — COPY ile veri kurtarma}]
+-- Gecici DB olustur ve yedegi yukle
+psql ... -c "CREATE DATABASE ${DB_NAME}_tmp OWNER $DB_USER;"
+pg_restore ... -d "${DB_NAME}_tmp" "$BACKUP"
+
+-- Her tabloyu uretim DB'sine kopyala
+for tablo in hastalar yatislar randevular tedaviler; do
+    psql -d "${DB_NAME}_tmp" -c "\COPY $tablo TO STDOUT" | \
+    psql -d "$DB_NAME"       -c "\COPY $tablo FROM STDIN"
+done
+\end{lstlisting}
+
+\subsection{Senaryo 3: Yanlış Toplu Güncelleme (UPDATE)}
+
+\textbf{Felaket:} Tüm randevular yanlışlıkla \texttt{iptal} durumuna getirilir.
+
+\begin{lstlisting}[caption={Senaryo 3 — yanlış güncelleme ve kurtarma}]
+-- Felaket
+UPDATE randevular SET durum = 'iptal';
+
+-- Kurtarma: yedekten dogru durumlari al
+CREATE TEMP TABLE randevu_kurtarma (id int, durum text);
+\COPY randevu_kurtarma FROM '/tmp/randevu_kurtarma.csv' CSV;
+
+UPDATE randevular r
+SET durum = k.durum
+FROM randevu_kurtarma k
+WHERE r.id = k.id;
+\end{lstlisting}
+
+\subsection{Senaryo 4: Veritabanı Tamamen Kayboldu}
+
+\textbf{Felaket:} Veritabanının tamamı kaybolur.
+
+\textbf{Kurtarma:} Tam yedek yeni bir veritabanına geri yüklenir:
+
+\begin{lstlisting}[caption={Senaryo 4 — tam kurtarma}]
+-- Kurtarma veritabani olustur
+psql ... -c "CREATE DATABASE ${DB_NAME}_kurtarildi OWNER $DB_USER;"
+
+-- Tam yedegi geri yukle
+pg_restore ... -d "${DB_NAME}_kurtarildi" "$BACKUP_S4"
+
+-- Uretimle degistirmek icin:
+-- ALTER DATABASE hastane_db RENAME TO hastane_db_eski;
+-- ALTER DATABASE hastane_db_kurtarildi RENAME TO hastane_db;
+\end{lstlisting}
+
+\section{Point-in-Time Recovery (PITR)}
+
+\texttt{09\_pitr\_kurtarma.sh}, WAL replay mekanizmasını kullanarak veritabanını belirli bir zaman noktasına geri döndürür.
+
+\begin{lstlisting}[caption={PITR — geri yükleme noktası oluşturma}]
+-- 1. Geri yukleme noktasi olustur
+SELECT pg_create_restore_point('pitr_test_20260421');
+
+-- 2. Temel yedek al
+pg_dump -Fc -Z9 "$DB_NAME" -f "pitr_temel.dump"
+
+-- 3. Felaket olustur — FK sirasina gore bagimli tablolar once silinir
+WITH hedef AS (SELECT id FROM hastalar WHERE id % 5 = 0)
+DELETE FROM receteler
+    WHERE tedavi_id IN (SELECT id FROM tedaviler
+                        WHERE hasta_id IN (SELECT id FROM hedef));
+WITH hedef AS (SELECT id FROM hastalar WHERE id % 5 = 0)
+DELETE FROM tedaviler WHERE hasta_id IN (SELECT id FROM hedef);
+WITH hedef AS (SELECT id FROM hastalar WHERE id % 5 = 0)
+DELETE FROM yatislar  WHERE hasta_id IN (SELECT id FROM hedef);
+WITH hedef AS (SELECT id FROM hastalar WHERE id % 5 = 0)
+DELETE FROM randevular WHERE hasta_id IN (SELECT id FROM hedef);
+DELETE FROM hastalar WHERE id % 5 = 0;
+UPDATE doktorlar SET email = 'BOZUK_' || email WHERE id % 2 = 0;
+\end{lstlisting}
+
+\begin{lstlisting}[caption={pitr\_recovery\_example.conf — kurtarma yapılandırması}]
+-- WAL arsivinden geri yukleme komutu
+restore_command = 'cp /var/lib/postgres/backups/wal_archive/%f %p'
+
+-- Geri yukleme noktasina don (SECENEK A)
+recovery_target_name = 'pitr_test_20260421'
+recovery_target_action = 'promote'
+
+-- Zaman bazli alternatif (SECENEK B)
+-- recovery_target_time = '2026-04-21 12:00:00 +03'
+\end{lstlisting}
+
+Gerçek PITR adımları:
+
+\begin{enumerate}
+  \item PostgreSQL'i durdur: \texttt{sudo systemctl stop postgresql}
+  \item \texttt{pg\_basebackup} çıktısını veri dizinine çıkart
+  \item \texttt{pitr\_recovery\_example.conf} ayarlarını \texttt{postgresql.conf}'a ekle
+  \item Recovery sinyali oluştur: \texttt{sudo touch /var/lib/postgres/data/recovery.signal}
+  \item PostgreSQL'i başlat; kurtarma tamamlandığında \texttt{recovery.signal} otomatik silinir
+\end{enumerate}
+
+\section{Otomatik Zamanlayıcı (Cron)}
+
+\texttt{07\_zamanlanmis\_yedekleme.sh}, yedekleme görevlerini kullanıcının crontab'ına ekler ve otomatik çalışacak bir betik (\texttt{auto\_yedekleme.sh}) oluşturur.
+
+\begin{lstlisting}[caption={config/crontab\_yedekleme.txt — yedekleme takvimi}]
+-- Her gece 02:00 -- Gunluk tam yedek
+0 2 * * *   auto_yedekleme.sh
+
+-- Her Pazar 03:00 -- Haftalik tam yedek (tum formatlar)
+0 3 * * 0   04_tam_yedekleme.sh
+
+-- Is gunleri 09:00-18:00 arasi her saat -- Fark yedek
+0 9-18 * * 1-5  06_fark_yedekleme.sh
+
+-- Her ayin 1'i 04:00 -- Aylik artik yedek
+0 4 1 * *   05_artik_yedekleme.sh
+\end{lstlisting}
+
+\begin{table}[ht]
+  \centering
+  \begin{tabular}{lcc}
+    \toprule
+    \textbf{Periyot} & \textbf{Saat} & \textbf{Tür} \\
+    \midrule
+    Her gece         & 02:00         & Otomatik tam yedek \\
+    Her Pazar        & 03:00         & Tam yedek (4 format) \\
+    İş günleri       & 09:00–18:00   & Fark yedek (her saat) \\
+    Her ayın 1'i     & 04:00         & Artık yedek \\
+    \bottomrule
+  \end{tabular}
+  \caption{Haftalık yedekleme takvimi}
+\end{table}
+
+\section{Yedek Doğrulama}
+
+Bir yedeğin var olması, geri yüklenebilir olduğu anlamına gelmez. \texttt{10\_yedek\_test.sh} beş aşamalı doğrulama yapar:
+
+\begin{enumerate}
+  \item \textbf{Yedek oluşturma:} Custom ve SQL formatlarında yedek alınır.
+  \item \textbf{Bütünlük kontrolü:} \texttt{pg\_restore --list} ile format geçerli mi, bozulma var mı?
+  \item \textbf{Geri yükleme testi:} Geçici veritabanına geri yüklenir; tüm tabloların kayıt sayısı üretimle karşılaştırılır.
+  \item \textbf{Veri bütünlüğü:} Yabancı anahtar kısıtlamaları, view'lar ve indeksler doğrulanır.
+  \item \textbf{Performans:} Yedek süresi ve boyutu ölçülür.
+\end{enumerate}
+
+\begin{lstlisting}[caption={10\_yedek\_test.sh — bütünlük ve geri yükleme testi}]
+-- Butunluk kontrolu
+pg_restore --list "$F_CUSTOM" > restore_list.txt
+TABLO_SAYISI=$(grep -c "TABLE DATA" restore_list.txt)
+
+-- Gecici DB'ye geri yukle
+psql ... -c "CREATE DATABASE $TEST_DB OWNER $DB_USER;"
+pg_restore ... -d "$TEST_DB" "$F_CUSTOM"
+
+-- Kayit sayilarini karsilastir
+for tablo in bolumler doktorlar hastalar yataklar
+             randevular yatislar tedaviler receteler; do
+    PROD=$(psql -d "$DB_NAME" -tAc "SELECT COUNT(*) FROM $tablo;")
+    TEST=$(psql -d "$TEST_DB" -tAc "SELECT COUNT(*) FROM $tablo;")
+    -- Esit degilse FAIL raporla
+done
+
+-- FK kisitlama dogrulama
+SELECT COUNT(*) FROM randevular r
+WHERE NOT EXISTS (SELECT 1 FROM hastalar h WHERE h.id = r.hasta_id);
+-- 0 olmasi gerekir
+\end{lstlisting}
+
+Script \texttt{exit 0} (başarı) veya \texttt{exit 1} (hata) döner; cron ile entegre edildiğinde başarısız doğrulamalar \texttt{MAILTO} ile bildirilebilir.
+
+\begin{block}{Not}
+  Yedek doğrulama adımı atlanmamalıdır. Disk bozulması veya eksik WAL dosyası yedeği sessizce kullanılamaz hale getirebilir; bu durum ancak gerçek bir felaket anında fark edilir.
+\end{block}
+
+\chapter{Sonuç}
+
+Bu projede PostgreSQL için eksiksiz bir yedekleme ve felaketten kurtarma çözümü geliştirilmiştir. Toplam \textbf{11 script} (3 SQL, 8 bash) numaralı, düz bir dizin yapısında organize edilmiştir:
+
+\begin{itemize}
+  \item \textbf{Güvenlik}: \texttt{scram-sha-256} kimlik doğrulama, iki ayrı rol (yedekleme ve uygulama), parolaların \texttt{.gitignore} ile sürüm kontrolü dışında tutulması.
+  \item \textbf{Yedekleme}: Tam (4 format), fark ve artık yedekleme; WAL arşivleme ve \texttt{pg\_basebackup} ile fiziksel yedek; saklama politikası (30 gün). Artık ve fark yedekleme WAL arşivleme olmaksızın mümkün değildir; \texttt{wal\_level = replica} ve \texttt{archive\_mode = on} zorunludur.
+  \item \textbf{Kurtarma}: Dört farklı felaket senaryosu (DROP TABLE, toplu DELETE, yanlış UPDATE, tam kayıp). Seçici \texttt{pg\_restore --table} ile tablo düzeyinde geri yükleme; \texttt{COPY} tabanlı hızlı veri aktarımı.
+  \item \textbf{PITR}: WAL replay ile belirli bir zaman noktasına veya isimlendirilmiş geri yükleme noktasına kurtarma.
+  \item \textbf{Doğrulama}: Beş aşamalı yedek doğrulama (oluşturma, bütünlük, geri yükleme, FK kontrolü, performans).
+  \item \textbf{Otomasyon}: Cron zamanlayıcısı ile günlük tam, saatlik fark ve aylık artık yedekleme.
+\end{itemize}
+
+Bu bileşenlerin birlikte çalışması, tam teşekküllü bir felaket kurtarma modeli ortaya koymaktadır: tek bir yedekleme türüne bağımlılık ortadan kalkar ve veri kaybı penceresi en aza indirilir.
+
+\end{document}
